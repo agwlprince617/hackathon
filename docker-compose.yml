@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./seed/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  authority:
+    build: ./authority
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9000/health"]
+      interval: 1s
+      timeout: 2s
+      retries: 20
+
+  reservation-api:
+    build: ./backend/java
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/student
+      DATABASE_USER: launchday
+      DATABASE_PASSWORD: launchday
+      AUTHORITY_URL: http://authority:9000
+      PORT: "8080"
+      STANDIN_MAX_PER_ITEM: "${STANDIN_MAX_PER_ITEM:-10}"
+      AUTHORITY_BREAKER_POLL_MS: "${AUTHORITY_BREAKER_POLL_MS:-1000}"
+      AUTHORITY_BREAKER_HEALTHY_CHECKS: "${AUTHORITY_BREAKER_HEALTHY_CHECKS:-3}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      authority:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
